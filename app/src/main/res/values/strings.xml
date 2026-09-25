@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">离线智能体</string>
+    <string name="accessibility_service_label">离线智能体 · 自动化服务</string>
+    <string name="accessibility_service_desc">该服务用于让离线智能体读取屏幕内容并执行点击、滑动、输入等自动化操作。所有推理均在本地完成，不会联网。</string>
+</resources>
