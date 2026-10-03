@@ -41,11 +41,13 @@ class StubEngine : LlmEngine {
     override fun unload() = Unit
 
     /**
-     * 从 prompt 中解析目标与可点击节点，返回下一步动作 JSON。
+     * 从 prompt 中解析目标、可点击节点与本地记忆，返回下一步动作 JSON。
      * prompt 约定格式（见 [com.offlineagent.core.Planner]）：
      *   目标：<goal>
+     *   本地记忆（…）：
+     *     - 元素A
      *   当前界面：
-     *   <index>. [clickable] text="..." desc="..." bounds=[x1,y1,x2,y2]
+     *   <index>. [clickable=true …] text="..." desc="..."
      */
     private fun reason(prompt: String): String {
         val goal = prompt.lineSequence()
@@ -53,6 +55,7 @@ class StubEngine : LlmEngine {
             ?.removePrefix("目标：")?.trim().orEmpty()
 
         val nodes = parseNodes(prompt)
+        val known = parseKnown(prompt)
 
         // 1) 打开/启动应用
         appMap.entries.firstOrNull { (kw, _) -> goal.contains(kw) }
@@ -67,12 +70,16 @@ class StubEngine : LlmEngine {
             return json("go_home", emptyMap())
         }
 
-        // 3) 在界面上寻找与目标文本相关的可点击节点
+        // 3) 在界面上寻找与目标文本相关的可点击节点（优先可见节点）
         val clickable = nodes.filter { it.clickable }
         clickable.firstOrNull { goal.contains(it.text) || it.text.contains(goal.take(4)) }
             ?.let { return json("tap", mapOf("byText" to it.text)) }
 
-        // 4) 输入类
+        // 4) 可见节点没匹配上，但本地记忆里有与目标相关的已知元素 → 尝试点选（可能需先导航）
+        known.firstOrNull { goal.contains(it) || it.contains(goal.take(4)) }
+            ?.let { return json("tap", mapOf("byText" to it)) }
+
+        // 5) 输入类
         if (goal.contains("输入") || goal.contains("搜索") || goal.contains("填写")) {
             val editable = nodes.firstOrNull { it.editable }
             val text = goal.substringAfter("输入").substringAfter("搜索").trim().takeIf { it.isNotEmpty() } ?: "示例文本"
@@ -81,10 +88,10 @@ class StubEngine : LlmEngine {
             }
         }
 
-        // 5) 有明确可点击项但没匹配上目标：点第一个
+        // 6) 有明确可点击项但没匹配上目标：点第一个
         clickable.firstOrNull()?.let { return json("tap", mapOf("byText" to it.text)) }
 
-        // 6) 无可执行动作 → 结束
+        // 7) 无可执行动作 → 结束
         return json("done", mapOf("result" to "未在界面发现可执行目标，已结束。"))
     }
 
@@ -95,18 +102,32 @@ class StubEngine : LlmEngine {
 
     private data class Node(val text: String, val desc: String, val clickable: Boolean, val editable: Boolean)
 
+    /** 解析"当前界面"段里的节点（与 [com.offlineagent.core.UiSnapshot.toPromptText] 输出格式匹配）。 */
     private fun parseNodes(prompt: String): List<Node> {
         val inUi = prompt.indexOf("当前界面：")
         if (inUi < 0) return emptyList()
         val body = prompt.substring(inUi)
-        val re = Regex("""text="([^"]*)"\s+desc="([^"]*)"\s+clickable=(\w+)\s+editable=(\w+)""")
-        return re.findAll(body).map { m ->
-            Node(
-                text = m.groupValues[1],
-                desc = m.groupValues[2],
-                clickable = m.groupValues[3] == "true",
-                editable = m.groupValues[4] == "true",
-            )
+        return body.lineSequence().mapNotNull { line ->
+            val textM = Regex("""text="([^"]*)"""").find(line) ?: return@mapNotNull null
+            val text = textM.groupValues[1]
+            val desc = Regex("""desc="([^"]*)"""").find(line)?.groupValues?.get(1).orEmpty()
+            val clickable = line.contains("clickable=true")
+            val editable = line.contains("editable=true")
+            Node(text, desc, clickable, editable)
         }.toList()
+    }
+
+    /** 解析"本地记忆"段里列出的已知可交互元素。 */
+    private fun parseKnown(prompt: String): List<String> {
+        val idx = prompt.indexOf("本地记忆")
+        if (idx < 0) return emptyList()
+        return prompt.substring(idx).lineSequence()
+            .takeWhile { !it.startsWith("当前界面：") }
+            .mapNotNull { line ->
+                val t = line.trim()
+                if (t.startsWith("- ")) t.removePrefix("- ").trim() else null
+            }
+            .filter { it.isNotEmpty() }
+            .toList()
     }
 }

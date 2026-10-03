@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.flow
 class AgentLoop(
     private val planner: Planner,
     private val device: DeviceController,
+    private val memory: MemoryStore,
 ) {
 
     data class Config(
@@ -50,7 +51,15 @@ class AgentLoop(
             }
             emit(Event.Observation(snapshot))
 
-            val plan = planner.next(goal, snapshot, history)
+            // 探索阶段：把当前界面可见的可交互元素登记进本地记忆
+            val clickableTexts = snapshot.nodes
+                .filter { it.clickable }
+                .map { it.text.ifBlank { it.desc } }
+                .filter { !it.isNullOrBlank() }
+                .map { it!! }
+            memory.discover(snapshot.packageName, clickableTexts)
+
+            val plan = planner.next(goal, snapshot, history, memory.knownElements(snapshot.packageName))
             val action = plan.toAction()
             emit(Event.Planning(action, plan.reason))
 
@@ -67,6 +76,14 @@ class AgentLoop(
                     val res = runCatching { device.execute(action) }
                         .getOrDefault(ActionResult(false, "执行异常"))
                     emit(Event.Executed(action, res.success, res.message))
+                    // 成功操作后强化记忆（记录该元素"有用"）
+                    if (res.success) {
+                        when (action) {
+                            is Action.TapText -> memory.remember(snapshot.packageName, action.byText)
+                            is Action.Type -> action.byText?.let { memory.remember(snapshot.packageName, it) }
+                            else -> {}
+                        }
+                    }
                     history.add(describe(action))
                     delay(config.stepDelayMs)
                 }

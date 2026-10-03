@@ -42,13 +42,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.geometry.Offset
+import com.offlineagent.core.Action
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen(viewModel: MainViewModel, onOpenSettings: () -> Unit) {
+fun MainScreen(viewModel: MainViewModel, container: com.offlineagent.di.AppContainer, onOpenSettings: () -> Unit) {
     val uiState by viewModel.state.collectAsStateWithLifecycle()
     var goal by remember { mutableStateOf("") }
     val context = LocalContext.current
+    val gridMode = container.settings.gridMode
 
     LaunchedEffect(Unit) { viewModel.refreshStatus() }
 
@@ -135,6 +139,40 @@ fun MainScreen(viewModel: MainViewModel, onOpenSettings: () -> Unit) {
                         fontFamily = FontFamily.Monospace,
                         fontSize = 11.sp,
                     )
+                }
+            }
+
+            // 网格参考覆盖层（开启网格模式时显示），便于对照单元格坐标下达 tap_grid
+            if (gridMode) {
+                Text("网格参考（tap_grid: row∈[0,${Action.GRID_ROWS}), col∈[0,${Action.GRID_COLS})）",
+                    style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(top = 8.dp))
+                Card(modifier = Modifier.fillMaxWidth().height(180.dp)) {
+                    Canvas(modifier = Modifier.fillMaxSize().padding(4.dp)) {
+                        val rows = Action.GRID_ROWS
+                        val cols = Action.GRID_COLS
+                        val w = size.width
+                        val h = size.height
+                        for (r in 0..rows) {
+                            val y = r * h / rows
+                            drawLine(Color(0xFF4DD0E1), Offset(0f, y), Offset(w, y), strokeWidth = 1f)
+                        }
+                        for (c in 0..cols) {
+                            val x = c * w / cols
+                            drawLine(Color(0xFF4DD0E1), Offset(x, 0f), Offset(x, h), strokeWidth = 1f)
+                        }
+                        val textPaint = android.graphics.Paint().apply {
+                            color = android.graphics.Color.WHITE
+                            textSize = 11f
+                        }
+                        for (r in 0 until rows) for (c in 0 until cols) {
+                            if ((r * cols + c) % 3 == 0) {
+                                val x = (c + 0.5f) * w / cols
+                                val y = (r + 0.5f) * h / rows
+                                drawContext.canvas.nativeCanvas.drawText("$r,$c", x - 12f, y + 4f, textPaint)
+                            }
+                        }
+                    }
                 }
             }
         }

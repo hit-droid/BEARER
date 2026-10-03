@@ -24,7 +24,7 @@ class MainActivity : ComponentActivity() {
                 val viewModel: MainViewModel = viewModel()
                 NavHost(navController = navController, startDestination = "main") {
                     composable("main") {
-                        MainScreen(viewModel, onOpenSettings = { navController.navigate("settings") })
+                        MainScreen(viewModel, container, onOpenSettings = { navController.navigate("settings") })
                     }
                     composable("settings") {
                         SettingsScreen(container, onBack = { navController.popBackStack() })

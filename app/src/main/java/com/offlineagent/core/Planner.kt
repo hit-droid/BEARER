@@ -20,10 +20,16 @@ class Planner(private val engine: LlmEngine) {
      * @param goal 用户目标
      * @param snapshot 当前界面快照
      * @param history 已执行的步骤摘要（用于避免死循环）
+     * @param knownElements 本地记忆中该应用已知的可交互元素（探索历史），用于辅助决策
      */
-    suspend fun next(goal: String, snapshot: UiSnapshot, history: List<String>): ActionPlan {
+    suspend fun next(
+        goal: String,
+        snapshot: UiSnapshot,
+        history: List<String>,
+        knownElements: List<String> = emptyList(),
+    ): ActionPlan {
         val system = buildSystemPrompt()
-        val user = buildUserPrompt(goal, snapshot, history)
+        val user = buildUserPrompt(goal, snapshot, history, knownElements)
 
         val raw = try {
             engine.generate(system, user).toList().joinToString("")
@@ -53,20 +59,30 @@ class Planner(private val engine: LlmEngine) {
 - {"action":"wait","ms":500}                          等待界面加载
 - {"action":"done","result":"完成说明"}               任务完成
 - {"action":"ask","question":"向用户提问"}            需要澄清
+- {"action":"tap_grid","row":0,"col":0}             按网格单元点按（row∈[0,9], col∈[0,5]），用于无文字标签的控件
 
 规则：
 1. 优先用 byText 点击可见节点；只有确实知道坐标时才用坐标。
 2. 先观察历史步骤，避免重复点击同一个元素。
-3. 目标明显达成时输出 done。
-4. 只输出一个 JSON 对象，字段用双引号。
+3. "本地记忆"里列出了本应用已知的可交互元素，若当前界面有对应目标可优先点选。
+4. 目标明显达成时输出 done。
+5. 只输出一个 JSON 对象，字段用双引号。
 """.trimIndent()
 
-    private fun buildUserPrompt(goal: String, snapshot: UiSnapshot, history: List<String>): String {
+    private fun buildUserPrompt(
+        goal: String,
+        snapshot: UiSnapshot,
+        history: List<String>,
+        knownElements: List<String>,
+    ): String {
         val hist = if (history.isEmpty()) "(无)" else history.joinToString("\n  ")
+        val memory = if (knownElements.isEmpty()) "(暂无)" else knownElements.joinToString("\n  - ", prefix = "  - ")
         return """
 目标：$goal
 历史步骤：
   $hist
+本地记忆（本应用已知可交互元素，探索历史积累）：
+$memory
 当前界面：
 ${snapshot.toPromptText()}
 """.trimIndent()

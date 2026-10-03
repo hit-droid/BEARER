@@ -4,11 +4,13 @@ import android.app.Application
 import com.offlineagent.BuildConfig
 import com.offlineagent.automation.AccessibilityAutomator
 import com.offlineagent.core.AgentLoop
+import com.offlineagent.core.MemoryStore
 import com.offlineagent.core.Planner
 import com.offlineagent.llm.LlamaCppEngine
 import com.offlineagent.llm.LlamaJni
 import com.offlineagent.llm.LlmEngine
 import com.offlineagent.llm.StubEngine
+import java.io.File
 
 /**
  * 轻量级依赖装配（不引入 DI 框架，手动连接即可）。
@@ -21,6 +23,9 @@ class AppContainer(private val app: Application) {
 
     val settings = Settings(app)
 
+    /** 本地记忆库：持久化探索到的 UI 元素，离线辅助决策。 */
+    val memory = MemoryStore(File(app.filesDir, "offline_agent_memory.json"))
+
     val automator = AccessibilityAutomator()
 
     private val engine: LlmEngine by lazy {
@@ -30,7 +35,7 @@ class AppContainer(private val app: Application) {
 
     val planner = Planner(engine)
 
-    val agentLoop = AgentLoop(planner, automator)
+    val agentLoop = AgentLoop(planner, automator, memory)
 
     val engineName: String get() = engine.name
 

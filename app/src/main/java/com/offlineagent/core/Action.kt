@@ -46,6 +46,20 @@ sealed class Action {
 
     /** 需要向用户提问/澄清后才能继续。 */
     data class Ask(val question: String) : Action()
+
+    /**
+     * 按网格单元点按（对标 AppAgent 的网格覆盖）：用于没有文字标签、
+     * 仅靠坐标难以描述的无障碍控件。row∈[0,GRID_ROWS), col∈[0,GRID_COLS)。
+     */
+    data class TapGrid(val row: Int, val col: Int) : Action()
+
+    companion object {
+        /** 网格行数（竖屏约定）。 */
+        const val GRID_ROWS = 10
+
+        /** 网格列数。 */
+        const val GRID_COLS = 6
+    }
 }
 
 /**
@@ -69,6 +83,8 @@ data class ActionPlan(
     @SerialName("direction") val direction: String? = null,
     @SerialName("result") val result: String? = null,
     @SerialName("question") val question: String? = null,
+    @SerialName("row") val row: Int? = null,
+    @SerialName("col") val col: Int? = null,
 )
 
 /** 将 JSON 载体转换为领域动作；非法/未知动作回退为等待，保证循环不崩。 */
@@ -93,6 +109,8 @@ fun ActionPlan.toAction(): Action = when (action.lowercase()) {
     "done", "finish", "complete" -> Action.Done(result ?: "已完成")
     "ask", "question" -> Action.Ask(question ?: "需要更多信息才能继续")
 
+    "tap_grid", "grid" -> if (row != null && col != null) Action.TapGrid(row, col) else Action.Wait(500)
+
     else -> Action.Wait(500)
 }
 
@@ -109,4 +127,5 @@ fun Action.label(): String = when (this) {
     is Action.Scroll -> "滚动 $direction"
     is Action.Done -> "完成"
     is Action.Ask -> "提问"
+    is Action.TapGrid -> "网格点按($row,$col)"
 }

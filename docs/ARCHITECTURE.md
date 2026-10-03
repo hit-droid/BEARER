@@ -55,6 +55,19 @@
 `repeat(maxSteps)` 内：读屏 → 规划 → 执行 → 记录历史 → 延迟。遇到 `Done`/`Ask` 或错误即终止，
 通过 `Flow<Event>` 把每步实时暴露给 UI。
 
+### 6. 本地记忆库 `MemoryStore`（对标 AppAgent 探索机制）
+灵感来自 [Tencent AppAgent](https://github.com/TencentQQGYLab/AppAgent) 的"先探索 App、积累 UI 知识"思路，
+但完全离线落地：
+- 每步读屏后，`AgentLoop` 把当前界面可见的可交互元素 `discover()` 进记忆（JSON，存于应用私有目录）；
+- 成功操作后 `remember()` 强化该元素权重（点击次数 +1）；
+- `Planner` 把"本地记忆中该应用已知可交互元素"作为上下文注入 prompt，辅助模型/规则规划器决策；
+- 设置页可查看记忆统计并"清空本地记忆"。
+
+### 7. 网格点按 `Action.TapGrid`
+对无文字标签、仅靠坐标难以描述的控件，提供按网格单元（默认 10×6）点按的能力。
+`AccessibilityAutomator` 按屏幕尺寸换算单元格中心坐标为像素坐标后派发点击；设置中开启"网格点按模式"后，
+主页显示网格参考覆盖层，便于对照单元格坐标下达 `tap_grid` 动作。
+
 ## 离线保证
 - `AndroidManifest.xml` 不声明 `INTERNET` 权限；
 - 模型文件通过 ADB 推送到私有目录，不联网下载；

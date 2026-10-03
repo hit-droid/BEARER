@@ -47,6 +47,8 @@ fun SettingsScreen(container: AppContainer, onBack: () -> Unit) {
     var temperature by remember { mutableFloatStateOf(s.temperature) }
     var maxTokens by remember { mutableIntStateOf(s.maxTokens) }
     var autoEnabled by remember { mutableStateOf(AgentAccessibilityService.instance != null) }
+    var gridMode by remember { mutableStateOf(s.gridMode) }
+    var memStats by remember { mutableStateOf(container.memory.stats()) }
 
     Scaffold(
         topBar = {
@@ -121,10 +123,40 @@ fun SettingsScreen(container: AppContainer, onBack: () -> Unit) {
                     s.temperature = temperature
                     s.maxTokens = maxTokens
                     s.automationEnabled = autoEnabled
+                    s.gridMode = gridMode
                     onBack()
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("保存并返回") }
+
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("网格点按模式", style = MaterialTheme.typography.labelMedium)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "开启后主页叠加网格覆盖层，便于参考单元格坐标下达 tap_grid 动作（用于无文字标签的控件）",
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Switch(checked = gridMode, onCheckedChange = { gridMode = it })
+                    }
+                }
+            }
+
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("本地记忆库（探索知识库）", style = MaterialTheme.typography.labelMedium)
+                    Text(memStats, style = MaterialTheme.typography.bodySmall)
+                    Button(onClick = {
+                        container.memory.clear()
+                        memStats = container.memory.stats()
+                    }) { Text("清空本地记忆") }
+                    Text(
+                        "智能体在运行中会自动记录各 App 的可交互元素，下次执行同类任务时作为参考，提升离线成功率。",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
         }
     }
 }

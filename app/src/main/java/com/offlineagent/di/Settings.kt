@@ -28,10 +28,16 @@ class Settings(context: Context) {
         get() = prefs.getBoolean(KEY_AUTO, false)
         set(v) = prefs.edit().putBoolean(KEY_AUTO, v).apply()
 
+    /** 网格点按模式：在主页叠加网格，便于参考单元格坐标下达 tap_grid 动作。 */
+    var gridMode: Boolean
+        get() = prefs.getBoolean(KEY_GRID, false)
+        set(v) = prefs.edit().putBoolean(KEY_GRID, v).apply()
+
     companion object {
         private const val KEY_MODEL_PATH = "model_path"
         private const val KEY_TEMP = "temperature"
         private const val KEY_MAX_TOKENS = "max_tokens"
         private const val KEY_AUTO = "automation_enabled"
+        private const val KEY_GRID = "grid_mode"
     }
 }

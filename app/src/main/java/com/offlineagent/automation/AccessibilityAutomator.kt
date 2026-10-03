@@ -59,6 +59,12 @@ class AccessibilityAutomator : DeviceController {
                 ActionResult(true, "等待 ${action.ms}ms")
             }
             is Action.Scroll -> scroll(action.direction, svc)
+            is Action.TapGrid -> {
+                val (w, h) = screenSize()
+                val x = ((action.col + 0.5f) / Action.GRID_COLS * w).toInt().coerceIn(0, w)
+                val y = ((action.row + 0.5f) / Action.GRID_ROWS * h).toInt().coerceIn(0, h)
+                dispatchTap(x.toFloat(), y.toFloat()).asResult("网格点按(${action.row},${action.col})→($x,$y)")
+            }
             is Action.Done -> ActionResult(true, "完成")
             is Action.Ask -> ActionResult(true, "需要用户澄清")
         }
@@ -115,6 +121,12 @@ class AccessibilityAutomator : DeviceController {
     }
 
     // ---- 手势派发 ----
+
+    /** 返回屏幕尺寸（像素），用于网格坐标换算。 */
+    private fun screenSize(): Pair<Int, Int> {
+        val dm = service?.resources?.displayMetrics ?: return 1080 to 1920
+        return dm.widthPixels to dm.heightPixels
+    }
 
     private suspend fun dispatchTap(x: Float, y: Float): Boolean {
         val path = Path().apply { moveTo(x, y); lineTo(x, y) }
