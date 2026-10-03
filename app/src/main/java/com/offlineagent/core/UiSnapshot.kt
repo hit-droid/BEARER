@@ -13,6 +13,14 @@ data class UiSnapshot(
     val packageName: String,
     val activity: String?,
     val nodes: List<Node>,
+    /**
+     * 页面指纹：由 `packageName + 界面显著文本集合` 计算，稳定区分不同页面。
+     * 用于知识库中的"页面"识别与导航边记录（离线无截图，无法用语义理解页面，
+     * 用结构化签名近似 AppAgent 的"页面锚点"）。
+     */
+    val pageKey: String = "unknown#none",
+    /** 尽力提取的页面标题（界面顶部可读性较好的短文本），仅供展示与 prompt。 */
+    val title: String = "",
 ) {
     /** 转为紧凑文本，作为规划器 prompt 的一部分。 */
     fun toPromptText(): String {
@@ -50,14 +58,27 @@ data class UiSnapshot(
 
             val collected = mutableListOf<Node>()
             val seen = HashSet<Long>()
+            // 全部非空文本/描述（用于页面指纹）；短文本候选（用于尽力提取标题）
+            val allTexts = mutableListOf<String>()
+            val shortTexts = mutableListOf<String>()
+
             fun visit(node: AccessibilityNodeInfo?) {
                 if (node == null) return
                 // 用窗口层级去重，避免重复收集同一节点
                 val key = System.identityHashCode(node).toLong()
                 if (!seen.add(key)) return
 
-                val hasText = !node.text.isNullOrBlank()
-                val hasDesc = !node.contentDescription.isNullOrBlank()
+                val t = node.text?.toString().orEmpty()
+                val d = node.contentDescription?.toString().orEmpty()
+                if (t.isNotBlank()) {
+                    allTexts.add(t)
+                    if (t.length in 1..30) shortTexts.add(t)
+                } else if (d.isNotBlank()) {
+                    allTexts.add(d)
+                }
+
+                val hasText = t.isNotBlank()
+                val hasDesc = d.isNotBlank()
                 val interactive = node.isClickable || node.isEditable || node.isScrollable
                 if (hasText || hasDesc || interactive) {
                     val r = Rect()
@@ -68,8 +89,8 @@ data class UiSnapshot(
                     }
                     collected.add(
                         Node(
-                            text = node.text?.toString().orEmpty(),
-                            desc = node.contentDescription?.toString().orEmpty(),
+                            text = t,
+                            desc = d,
                             clickable = node.isClickable,
                             editable = node.isEditable,
                             scrollable = node.isScrollable,
@@ -95,7 +116,16 @@ data class UiSnapshot(
 
             val pkg = root.packageName?.toString().orEmpty()
             val act = root.className?.toString()
-            return UiSnapshot(pkg, act, trimmed)
+
+            // 页面标题：优先取不含数字/符号、像标题的短文本
+            val title = shortTexts
+                .firstOrNull { it.any { c -> c.isLetter() } }
+                ?: shortTexts.firstOrNull().orEmpty()
+            // 页面指纹：显著文本集合签名，稳定区分页面
+            val signature = allTexts.distinct().sorted().take(60).joinToString("|")
+            val pageKey = "$pkg#${signature.hashCode().absoluteValue.toString(36)}"
+
+            return UiSnapshot(pkg, act, trimmed, pageKey, title.take(48))
         }
 
         private const val MAX_NODES = 60

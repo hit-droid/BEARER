@@ -20,16 +20,16 @@ class Planner(private val engine: LlmEngine) {
      * @param goal 用户目标
      * @param snapshot 当前界面快照
      * @param history 已执行的步骤摘要（用于避免死循环）
-     * @param knownElements 本地记忆中该应用已知的可交互元素（探索历史），用于辅助决策
+     * @param knowledgeDoc 本地知识库导出的"页面地图 + 导航"文档（探索积累），用于辅助决策
      */
     suspend fun next(
         goal: String,
         snapshot: UiSnapshot,
         history: List<String>,
-        knownElements: List<String> = emptyList(),
+        knowledgeDoc: String = "",
     ): ActionPlan {
         val system = buildSystemPrompt()
-        val user = buildUserPrompt(goal, snapshot, history, knownElements)
+        val user = buildUserPrompt(goal, snapshot, history, knowledgeDoc)
 
         val raw = try {
             engine.generate(system, user).toList().joinToString("")
@@ -64,7 +64,7 @@ class Planner(private val engine: LlmEngine) {
 规则：
 1. 优先用 byText 点击可见节点；只有确实知道坐标时才用坐标。
 2. 先观察历史步骤，避免重复点击同一个元素。
-3. "本地记忆"里列出了本应用已知的可交互元素，若当前界面有对应目标可优先点选。
+3. "本地知识库"给出当前页面的可交互元素及其用途，以及"点某元素可直达某页"的导航关系；若目标涉及某页面，优先沿已知导航前往。
 4. 目标明显达成时输出 done。
 5. 只输出一个 JSON 对象，字段用双引号。
 """.trimIndent()
@@ -73,15 +73,15 @@ class Planner(private val engine: LlmEngine) {
         goal: String,
         snapshot: UiSnapshot,
         history: List<String>,
-        knownElements: List<String>,
+        knowledgeDoc: String,
     ): String {
         val hist = if (history.isEmpty()) "(无)" else history.joinToString("\n  ")
-        val memory = if (knownElements.isEmpty()) "(暂无)" else knownElements.joinToString("\n  - ", prefix = "  - ")
+        val memory = if (knowledgeDoc.isBlank()) "(暂无，本次执行中会逐步探索)" else knowledgeDoc
         return """
 目标：$goal
 历史步骤：
   $hist
-本地记忆（本应用已知可交互元素，探索历史积累）：
+本地知识库（页面地图与导航，探索积累，可信参考）：
 $memory
 当前界面：
 ${snapshot.toPromptText()}

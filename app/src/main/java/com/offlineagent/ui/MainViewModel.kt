@@ -71,8 +71,14 @@ class MainViewModel(app: android.app.Application) : AndroidViewModel(app) {
                         is AgentLoop.Event.Planning ->
                             append("PLAN", "规划 → ${event.action.label()}${event.reason?.let { "  (${it})" } ?: ""}")
                         is AgentLoop.Event.Observation -> {
-                            _state.update { it.copy(observation = event.snapshot.toPromptText().take(2000)) }
-                            append("OBS", "观察：${event.snapshot.packageName}（${event.snapshot.nodes.size} 节点）")
+                            val snap = event.snapshot
+                            _state.update {
+                                it.copy(
+                                    observation = "页面：「${snap.title}」（${snap.packageName}）\n" +
+                                        snap.toPromptText().take(2000),
+                                )
+                            }
+                            append("OBS", "观察：${snap.packageName}「${snap.title}」(${snap.nodes.size} 节点)")
                         }
                         is AgentLoop.Event.Executed ->
                             append(if (event.success) "ACT" else "FAIL", "执行 ${event.action.label()} → ${event.message}")

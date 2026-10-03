@@ -41,11 +41,12 @@ class StubEngine : LlmEngine {
     override fun unload() = Unit
 
     /**
-     * 从 prompt 中解析目标、可点击节点与本地记忆，返回下一步动作 JSON。
+     * 从 prompt 中解析目标、可点击节点与本地知识库，返回下一步动作 JSON。
      * prompt 约定格式（见 [com.offlineagent.core.Planner]）：
      *   目标：<goal>
-     *   本地记忆（…）：
-     *     - 元素A
+     *   本地知识库（页面地图与导航，探索积累，可信参考）：
+     *     · 当前页「...」已知可交互元素：
+     *         - "元素文本"：用于…
      *   当前界面：
      *   <index>. [clickable=true …] text="..." desc="..."
      */
@@ -117,16 +118,14 @@ class StubEngine : LlmEngine {
         }.toList()
     }
 
-    /** 解析"本地记忆"段里列出的已知可交互元素。 */
+    /** 解析"本地知识库"段里列出的已知可交互元素文本（用于目标无直接可见匹配时的兜底点选）。 */
     private fun parseKnown(prompt: String): List<String> {
-        val idx = prompt.indexOf("本地记忆")
+        val idx = prompt.indexOf("本地知识库")
         if (idx < 0) return emptyList()
+        val re = Regex("""-\s+"([^"]+)"""")
         return prompt.substring(idx).lineSequence()
             .takeWhile { !it.startsWith("当前界面：") }
-            .mapNotNull { line ->
-                val t = line.trim()
-                if (t.startsWith("- ")) t.removePrefix("- ").trim() else null
-            }
+            .mapNotNull { re.find(it)?.groupValues?.get(1) }
             .filter { it.isNotEmpty() }
             .toList()
     }

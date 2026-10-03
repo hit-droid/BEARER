@@ -55,13 +55,16 @@
 `repeat(maxSteps)` 内：读屏 → 规划 → 执行 → 记录历史 → 延迟。遇到 `Done`/`Ask` 或错误即终止，
 通过 `Flow<Event>` 把每步实时暴露给 UI。
 
-### 6. 本地记忆库 `MemoryStore`（对标 AppAgent 探索机制）
+### 6. 文档型知识库 `MemoryStore`（对标 AppAgent 探索机制）
 灵感来自 [Tencent AppAgent](https://github.com/TencentQQGYLab/AppAgent) 的"先探索 App、积累 UI 知识"思路，
-但完全离线落地：
-- 每步读屏后，`AgentLoop` 把当前界面可见的可交互元素 `discover()` 进记忆（JSON，存于应用私有目录）；
-- 成功操作后 `remember()` 强化该元素权重（点击次数 +1）；
-- `Planner` 把"本地记忆中该应用已知可交互元素"作为上下文注入 prompt，辅助模型/规则规划器决策；
-- 设置页可查看记忆统计并"清空本地记忆"。
+但完全离线落地，且从"元素清单"升级为**带功能描述的文档型知识库**：
+- `UiSnapshot` 在 `fromRoot()` 时计算 `pageKey`（包名 + 界面显著文本签名，稳定区分页面）与 `title`（尽力提取的页面标题），作为"页面锚点"（无需截图）；
+- 每步读屏后，`AgentLoop` 登记当前**页面**与可见**元素**（元素带 `function` 功能描述、`role` 角色、`pageKey` 归属页面）；
+- 点击文本后若 `pageKey` 变化，即记录一条**导航边**（`NavEdge`：从某页点某元素到达某页）；
+- `Planner` 调用 `MemoryStore.describe(pkg, pageKey)` 把"当前页面可交互元素（含用途）＋ 从本页可直达的页面"整份注入 prompt，让本地模型理解"点 X 去 Y 页"；
+- `MemoryStore.dump()` 导出全量可读知识库，设置页"预览内容"直接展示；也可一键清空。
+
+数据模型：`AppKnowledgeDocument`（按包名聚合）→ `PageKnowledge` / `ElementKnowledge` / `NavEdge`，统一序列化为应用私有目录的 `offline_agent_memory.json`（`version=2`）。
 
 ### 7. 网格点按 `Action.TapGrid`
 对无文字标签、仅靠坐标难以描述的控件，提供按网格单元（默认 10×6）点按的能力。

@@ -51,15 +51,23 @@ class AgentLoop(
             }
             emit(Event.Observation(snapshot))
 
-            // 探索阶段：把当前界面可见的可交互元素登记进本地记忆
-            val clickableTexts = snapshot.nodes
-                .filter { it.clickable }
-                .map { it.text.ifBlank { it.desc } }
-                .filter { !it.isNullOrBlank() }
-                .map { it!! }
-            memory.discover(snapshot.packageName, clickableTexts)
+            // ---- 探索阶段：把当前页面与可交互元素登记进文档型知识库 ----
+            val pkg = snapshot.packageName
+            val pageKey = snapshot.pageKey
+            val visible = snapshot.nodes.filter { it.clickable || it.editable || it.scrollable }
+            val keys = mutableListOf<String>()
+            for (n in visible) {
+                val key = elementKeyOf(n.text, n.desc)
+                keys.add(key)
+                val role = inferRole(n.className, n.editable, n.clickable)
+                val fn = inferFunction(n.text, n.desc, n.editable, role)
+                memory.recordElement(pkg, key, n.text, n.desc, fn, role, pageKey)
+            }
+            memory.recordPage(pkg, pageKey, snapshot.title, keys)
 
-            val plan = planner.next(goal, snapshot, history, memory.knownElements(snapshot.packageName))
+            // 注入"页面地图 + 导航"文档，让规划器（本地 LLM）参考
+            val knowledgeDoc = memory.describe(pkg, pageKey)
+            val plan = planner.next(goal, snapshot, history, knowledgeDoc)
             val action = plan.toAction()
             emit(Event.Planning(action, plan.reason))
 
@@ -76,15 +84,28 @@ class AgentLoop(
                     val res = runCatching { device.execute(action) }
                         .getOrDefault(ActionResult(false, "执行异常"))
                     emit(Event.Executed(action, res.success, res.message))
-                    // 成功操作后强化记忆（记录该元素"有用"）
+
+                    // 成功操作后强化该元素（"有用"）
                     if (res.success) {
                         when (action) {
-                            is Action.TapText -> memory.remember(snapshot.packageName, action.byText)
-                            is Action.Type -> action.byText?.let { memory.remember(snapshot.packageName, it) }
+                            is Action.TapText -> memory.success(pkg, elementKeyOf(action.byText, ""))
+                            is Action.Type -> action.byText?.let { memory.success(pkg, elementKeyOf(it, "")) }
                             else -> {}
                         }
+                        // 点击文本后若页面切换，记录一条导航边
+                        if (action is Action.TapText) {
+                            val after = runCatching { device.snapshot() }.getOrElse { null }
+                            if (after != null && after.pageKey != pageKey) {
+                                memory.recordNavigation(pkg, pageKey, elementKeyOf(action.byText, ""), after.pageKey)
+                            }
+                        }
+                    } else {
+                        if (action is Action.TapText) memory.fail(pkg, elementKeyOf(action.byText, ""))
                     }
+
                     history.add(describe(action))
+                    // 每步统一落盘一次（探索登记只更新内存，避免频繁全量写文件）
+                    memory.flush()
                     delay(config.stepDelayMs)
                 }
             }

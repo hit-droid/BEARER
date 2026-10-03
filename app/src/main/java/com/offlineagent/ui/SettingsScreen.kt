@@ -49,6 +49,8 @@ fun SettingsScreen(container: AppContainer, onBack: () -> Unit) {
     var autoEnabled by remember { mutableStateOf(AgentAccessibilityService.instance != null) }
     var gridMode by remember { mutableStateOf(s.gridMode) }
     var memStats by remember { mutableStateOf(container.memory.stats()) }
+    var showDump by remember { mutableStateOf(false) }
+    var dumpText by remember { mutableStateOf("") }
 
     Scaffold(
         topBar = {
@@ -145,14 +147,25 @@ fun SettingsScreen(container: AppContainer, onBack: () -> Unit) {
 
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("本地记忆库（探索知识库）", style = MaterialTheme.typography.labelMedium)
+                    Text("本地知识库（文档型记忆）", style = MaterialTheme.typography.labelMedium)
                     Text(memStats, style = MaterialTheme.typography.bodySmall)
-                    Button(onClick = {
-                        container.memory.clear()
-                        memStats = container.memory.stats()
-                    }) { Text("清空本地记忆") }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = {
+                            container.memory.clear()
+                            memStats = container.memory.stats()
+                            if (showDump) dumpText = container.memory.dump()
+                        }, modifier = Modifier.weight(1f)) { Text("清空知识库") }
+                        Button(onClick = {
+                            showDump = !showDump
+                            if (showDump) dumpText = container.memory.dump()
+                        }, modifier = Modifier.weight(1f)) { Text(if (showDump) "隐藏" else "预览内容") }
+                    }
+                    if (showDump) {
+                        Text(dumpText, style = MaterialTheme.typography.bodySmall, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+                    }
                     Text(
-                        "智能体在运行中会自动记录各 App 的可交互元素，下次执行同类任务时作为参考，提升离线成功率。",
+                        "智能体在运行中自动记录各 App 的可交互元素及其用途、所属页面，以及" +
+                            "「点此元素→到达页面」的导航关系，下次执行同类任务时整份注入规划器，显著减少盲目试探。所有数据只存本机私有目录。",
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
