@@ -4,10 +4,12 @@ import android.app.Application
 import com.offlineagent.BuildConfig
 import com.offlineagent.automation.AccessibilityAutomator
 import com.offlineagent.core.AgentLoop
+import com.offlineagent.core.Explorer
 import com.offlineagent.core.MemoryStore
 import com.offlineagent.core.Planner
 import com.offlineagent.core.ReplayRunner
 import com.offlineagent.core.ScriptStore
+import com.offlineagent.llm.ElementAnnotator
 import com.offlineagent.llm.LlamaCppEngine
 import com.offlineagent.llm.LlamaJni
 import com.offlineagent.llm.LlmEngine
@@ -44,6 +46,15 @@ class AppContainer(private val app: Application) {
 
     /** 脚本回放器：按已录制脚本逐步执行，无需重新规划。 */
     val replayRunner = ReplayRunner(automator, memory)
+
+    /**
+     * UI 元素语义标注器：有真实本地模型时，把知识库中的元素清单升级为
+     * "带功能描述的文档"；否则 [ElementAnnotator.available] 为 false，自动走启发式。
+     */
+    val annotator = ElementAnnotator(engine)
+
+    /** 自动探索器：自主遍历目标 App 的页面，沉淀页面地图与导航关系。 */
+    val explorer = Explorer(automator, memory, annotator)
 
     val engineName: String get() = engine.name
 

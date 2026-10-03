@@ -19,6 +19,15 @@ interface LlmEngine {
     val isModelLoaded: Boolean
 
     /**
+     * 引擎是否能遵循"任意指令提示词"，而非只能输出固定格式的动作 JSON。
+     *
+     * 真实 LLM 为 true，可用于语义标注、目标拆解等辅助任务；
+     * 规则式规划器（如 [StubEngine]）只能按既定分支应答，必须声明 false，
+     * 以免上层把无关任务（如"给元素写功能说明"）误发给它。
+     */
+    val canFollowArbitraryInstructions: Boolean get() = true
+
+    /**
      * 加载本地模型。
      * @param modelPath 设备上的 GGUF 绝对路径（通常在应用私有目录）。
      */

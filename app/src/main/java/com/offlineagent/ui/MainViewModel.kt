@@ -6,6 +6,7 @@ import com.offlineagent.OfflineAgentApp
 import com.offlineagent.automation.AgentAccessibilityService
 import com.offlineagent.core.ActionScript
 import com.offlineagent.core.AgentLoop
+import com.offlineagent.core.Explorer
 import com.offlineagent.core.ReplayRunner
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -143,6 +144,59 @@ class MainViewModel(app: android.app.Application) : AndroidViewModel(app) {
             }.onFailure { append("ERROR", "回放异常：${it.message}") }
             _state.update { it.copy(running = false) }
             append("INFO", "回放已停止。")
+        }
+    }
+
+    /**
+     * 自动探索当前前台应用：广度优先遍历其页面，沉淀"页面地图 + 导航关系"到本地知识库。
+     * 不要求一定加载模型——无模型时仍能探索（元素描述退化为启发式），有模型则会补语义标注。
+     */
+    fun exploreApp() {
+        if (_state.value.running) return
+        job = viewModelScope.launch {
+            _state.update { it.copy(running = true, logs = emptyList(), observation = "") }
+            append("INFO", "开始自动探索：只点击，不输入文本、不触碰危险控件")
+            if (!_state.value.accessibilityEnabled) {
+                append("WARN", "无障碍服务未开启，探索无法执行（可在设置中开启）。")
+            }
+
+            // 有可用模型时顺便用于语义标注；加载失败不影响探索本身
+            container.ensureModelLoaded()
+                .onSuccess { if (container.annotator.available) append("INFO", "已启用本地模型语义标注") }
+                .onFailure { append("INFO", "未加载本地模型：元素描述退化为启发式推断") }
+
+            runCatching {
+                container.explorer.explore().collect { ev ->
+                    when (ev) {
+                        is Explorer.Event.Visiting -> {
+                            append("PAGE", "探索页面「${ev.title}」（第 ${ev.discovered} 页）")
+                            _state.update {
+                                it.copy(
+                                    observation = "探索中：第 ${ev.discovered} 页「${ev.title}」\n" +
+                                        "页面指纹 ${ev.pageKey}\n\n${container.memory.stats()}",
+                                )
+                            }
+                        }
+                        is Explorer.Event.Probing ->
+                            append("EXPLORE", "试探「${ev.label}」")
+                        is Explorer.Event.Navigation ->
+                            append("NAV", "发现路径：点「${ev.via}」→ 进入 ${ev.to}")
+                        is Explorer.Event.Backtracking ->
+                            append("BACK", "本页已探完，返回上层")
+                        is Explorer.Event.Annotated ->
+                            append("LLM", ev.count.takeIf { it > 0 }
+                                ?.let { "语义标注完成：$it 个元素写入知识库" }
+                                ?: "无可标注元素（或本地模型不可用）")
+                        is Explorer.Event.Finished ->
+                            append("DONE", "探索结束：页面 ${ev.pages} · 元素 ${ev.elements} · 步数 ${ev.steps}")
+                        is Explorer.Event.Error ->
+                            append("ERROR", ev.message)
+                    }
+                }
+            }.onFailure { append("ERROR", "探索异常：${it.message}") }
+
+            _state.update { it.copy(running = false) }
+            append("INFO", "探索已停止。可在「设置 → 本地知识库」预览学到的内容。")
         }
     }
 

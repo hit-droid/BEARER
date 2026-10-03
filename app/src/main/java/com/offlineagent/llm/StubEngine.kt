@@ -17,6 +17,9 @@ class StubEngine : LlmEngine {
     override val name: String = "Stub 规划器（无模型）"
     override val isModelLoaded: Boolean = true
 
+    /** 本引擎只能输出动作规划 JSON，无法完成语义标注等任意指令任务。 */
+    override val canFollowArbitraryInstructions: Boolean = false
+
     // 常见应用关键词 → 包名映射，用于"打开 XX"类目标
     private val appMap = mapOf(
         "设置" to "com.android.settings",

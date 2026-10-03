@@ -34,7 +34,19 @@ data class ElementKnowledge(
     var success: Int = 0,
     var fail: Int = 0,
     var lastSeen: Long = 0L,
-)
+    /**
+     * 功能描述的来源：
+     * - "heuristic"：由 [inferFunction] 按规则猜得（粗糙，例如直接复用标签文本）；
+     * - "llm"：由本地 LLM 通过 [com.offlineagent.llm.ElementAnnotator] 生成的语义描述。
+     * 语义标注只会升级 heuristic → llm，不会覆盖已有的 llm 描述。
+     */
+    var source: String = SOURCE_HEURISTIC,
+) {
+    companion object {
+        const val SOURCE_HEURISTIC = "heuristic"
+        const val SOURCE_LLM = "llm"
+    }
+}
 
 @Serializable
 data class PageKnowledge(
@@ -234,12 +246,76 @@ class MemoryStore(private val file: File) {
             ?.take(limit) ?: emptyList()
     }
 
+    /** 由表单读取出的待标注元素，交给语义标注器生成功能描述。 */
+    data class ElementSpec(
+        val key: String,
+        val text: String,
+        val desc: String,
+        val role: String,
+        val pageTitle: String,
+    )
+
+    /**
+     * 取出该应用尚未获得语义描述的元素，供本地 LLM 批量标注。
+     * 已由 LLM 标注过的元素不再重复处理，控制成本。
+     */
+    fun pendingSpecs(packageName: String, limit: Int = 40): List<ElementSpec> = synchronized(lock) {
+        val app = data.apps[packageName] ?: return emptyList()
+        app.elements.values
+            .filter { it.source != ElementKnowledge.SOURCE_LLM }
+            .filter { it.text.isNotBlank() || it.desc.isNotBlank() }
+            .sortedByDescending { it.clicks }
+            .take(limit)
+            .map {
+                ElementSpec(
+                    key = it.key,
+                    text = it.text,
+                    desc = it.desc,
+                    role = it.role,
+                    pageTitle = app.pages[it.pageKey]?.title.orEmpty(),
+                )
+            }
+    }
+
+    /**
+     * 回写一批 LLM 生成的语义描述，并标记为 [ElementKnowledge.SOURCE_LLM]。
+     * @param functions 元素 key → 功能描述
+     * @return 实际写入的条数
+     */
+    fun applyFunctions(packageName: String, functions: Map<String, String>): Int {
+        if (functions.isEmpty()) return 0
+        var written = 0
+        synchronized(lock) {
+            val apps = data.apps.toMutableMap()
+            val app = apps[packageName] ?: return 0
+            val elements = app.elements.toMutableMap()
+            for ((key, fn) in functions) {
+                val cur = elements[key] ?: continue
+                val desc = fn.trim().take(32)
+                if (desc.isBlank()) continue
+                elements[key] = cur.copy(function = desc, source = ElementKnowledge.SOURCE_LLM)
+                written++
+            }
+            apps[packageName] = app.copy(elements = elements)
+            data = MemoryFile(apps = apps)
+        }
+        if (written > 0) flush()
+        return written
+    }
+
+    /** 某应用已积累的知识规模：页面数 → 元素数。 */
+    fun describePackageStats(packageName: String): Pair<Int, Int> = synchronized(lock) {
+        val app = data.apps[packageName] ?: return 0 to 0
+        app.pages.size to app.elements.size
+    }
+
     fun stats(): String = synchronized(lock) {
         val apps = data.apps.size
         val totalPages = data.apps.values.sumOf { it.pages.size }
         val totalElems = data.apps.values.sumOf { it.elements.size }
         val totalNav = data.apps.values.sumOf { it.navEdges.size }
-        "已知应用 $apps 个 · 页面 $totalPages · 元素 $totalElems · 导航 $totalNav"
+        val annotated = data.apps.values.sumOf { app -> app.elements.values.count { it.source == ElementKnowledge.SOURCE_LLM } }
+        "已知应用 $apps 个 · 页面 $totalPages · 元素 $totalElems（语义标注 $annotated） · 导航 $totalNav"
     }
 
     /** 导出全量可读知识库（供 UI 预览 / 调试），展示页面、元素功能与导航边。 */
@@ -253,7 +329,8 @@ class MemoryStore(private val file: File) {
             }
             app.elements.values.sortedByDescending { it.success }.take(30).forEach { e ->
                 val label = e.text.ifBlank { e.desc }
-                sb.appendLine("    · \"$label\"：${e.function} [${e.role}] 成功${e.success}/${e.clicks}")
+                val tag = if (e.source == ElementKnowledge.SOURCE_LLM) " [语义]" else ""
+                sb.appendLine("    · \"$label\"：${e.function} [${e.role}]${tag} 成功${e.success}/${e.clicks}")
             }
             app.navEdges.take(20).forEach { edge ->
                 val el = app.elements[edge.elementKey]

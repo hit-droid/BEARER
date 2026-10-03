@@ -72,7 +72,7 @@ class AccessibilityAutomator : DeviceController {
 
     // ---- 具体动作实现 ----
 
-    private fun tapByText(byText: String, svc: AgentAccessibilityService): ActionResult {
+    private suspend fun tapByText(byText: String, svc: AgentAccessibilityService): ActionResult {
         val node = findNode(svc) { it.text?.toString() == byText || it.contentDescription?.toString() == byText }
             ?: findNode(svc) { contains(it.text, byText) || contains(it.contentDescription, byText) }
             ?: return ActionResult(false, "未找到可点击节点：\'$byText\'")

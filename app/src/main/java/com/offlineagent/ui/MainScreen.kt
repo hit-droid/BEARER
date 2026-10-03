@@ -24,6 +24,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
@@ -130,6 +131,16 @@ fun MainScreen(
                 ) { Text("停止") }
             }
 
+            // 「先摸清地形」：自动探索当前前台应用，把页面地图与导航关系写进本地知识库，
+            // 探索只点击安全控件、不输入文本，后续任务规划会因此更准。
+            Row(modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(
+                    onClick = { viewModel.exploreApp() },
+                    enabled = !uiState.running,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("探索当前应用（积累本地知识）") }
+            }
+
             // 实时观察
             Text("当前界面观察", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
             Card(
@@ -205,5 +216,10 @@ private fun levelColor(level: String): Color = when (level) {
     "DONE" -> Color(0xFFFFD166)
     "WARN" -> Color(0xFFFFB454)
     "FAIL", "ERROR" -> Color(0xFFFF6B6B)
+    // 探索与知识沉淀相关
+    "PAGE", "EXPLORE", "BACK" -> Color(0xFF8ECAE6)
+    "NAV" -> Color(0xFF48CAE4)
+    // 脚本录制/回放与本地模型标注
+    "REC", "STEP", "LLM" -> Color(0xFFC792EA)
     else -> Color(0xFFEAEAEA)
 }

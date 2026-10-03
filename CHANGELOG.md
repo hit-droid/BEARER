@@ -2,6 +2,25 @@
 
 本文件遵循 [Keep a Changelog](https://keepachangelog.com/) 约定，版本号采用 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.5.0] - 2026-10-03
+
+落地 [AppAgent](https://github.com/TencentQQGYLab/AppAgent) 的完整**两阶段**（自主探索 → 知识文档生成），把离线智能体从"边做边学"升级为"先摸清地形再办事"。
+
+### 新增
+- **自动探索器 `Explorer`**：广度优先遍历目标 App 的页面，登记页面元素并积累"点某元素 → 到达某页"的导航边。主页新增「探索当前应用」按钮。
+  - 安全约束：只点击、**永不输入文本**；内置危险标签黑名单（卸载/删除/支付/登出等）一律跳过；限制在目标包名范围内活动、越界即返回；步数与页面数双上限。
+- **元素语义标注器 `ElementAnnotator`**：探索结束后调用本地 LLM，把元素清单升级为"带功能描述的文档"（如"查看 WLAN 列表"），替代此前的启发式猜测。分批、低温、短输出，适配本地小模型。
+- **知识描述溯源**：`ElementKnowledge.source` 区分 `heuristic`（规则推断）/`llm`（模型生成），语义标注只升级不覆盖已有 LLM 描述；知识库统计与预览中可见标注比例。
+
+### 变更
+- `LlmEngine` 新增 `canFollowArbitraryInstructions`：规则式 `StubEngine` 声明为 false，使语义标注等"非规划任务"能正确降级（无模型时探索仍可用，仅描述退化为启发式）。
+
+### 修复
+- **真实编译错误**：`AccessibilityAutomator.tapByText` 为普通函数却调用了 `suspend fun dispatchTap`，会导致 Android Studio 编译失败；已改为 `suspend fun`。该问题由本轮引入的 Kotlin 编译器静态检查发现。
+
+### 工程
+- 版本号升至 0.5.0（versionCode 5）。
+
 ## [0.4.0] - 2026-10-03
 
 新增 **动作录制与回放（Record & Replay）** 能力，把离线智能体从"一次性规划执行"升级为"可复用自动化工具"。
