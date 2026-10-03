@@ -48,6 +48,7 @@ fun SettingsScreen(container: AppContainer, onBack: () -> Unit) {
     var maxTokens by remember { mutableIntStateOf(s.maxTokens) }
     var autoEnabled by remember { mutableStateOf(AgentAccessibilityService.instance != null) }
     var gridMode by remember { mutableStateOf(s.gridMode) }
+    var routeFirst by remember { mutableStateOf(s.routeFirst) }
     var memStats by remember { mutableStateOf(container.memory.stats()) }
     var showDump by remember { mutableStateOf(false) }
     var dumpText by remember { mutableStateOf("") }
@@ -126,10 +127,26 @@ fun SettingsScreen(container: AppContainer, onBack: () -> Unit) {
                     s.maxTokens = maxTokens
                     s.automationEnabled = autoEnabled
                     s.gridMode = gridMode
+                    s.routeFirst = routeFirst
                     onBack()
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("保存并返回") }
+
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("知识优先（确定性路线）", style = MaterialTheme.typography.labelMedium)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "开启后，执行任务会先在已积累的导航图上搜索路径：命中就直接按路线点击，" +
+                                "完全不调用大模型（更快、更稳）；查不到路径才回退到本地 LLM 规划。",
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Switch(checked = routeFirst, onCheckedChange = { routeFirst = it })
+                    }
+                }
+            }
 
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -84,7 +84,11 @@ class MainViewModel(app: android.app.Application) : AndroidViewModel(app) {
             }
             if (_state.value.recordMode) append("REC", "录制模式已开启：结束后自动保存脚本")
             runCatching {
-                container.agentLoop.run(goal, record = _state.value.recordMode).collect { event ->
+                container.agentLoop.run(
+                    goal = goal,
+                    config = AgentLoop.Config(useRoute = container.settings.routeFirst),
+                    record = _state.value.recordMode,
+                ).collect { event ->
                     when (event) {
                         is AgentLoop.Event.Planning ->
                             append("PLAN", "规划 → ${event.action.label()}${event.reason?.let { "  (${it})" } ?: ""}")
@@ -107,6 +111,15 @@ class MainViewModel(app: android.app.Application) : AndroidViewModel(app) {
                         }
                         is AgentLoop.Event.Finished ->
                             append("DONE", "完成：${event.result}（共 ${event.steps} 步）")
+                        // 知识优先：命中确定性路线时不消耗推理，直接按已积累路径执行
+                        is AgentLoop.Event.Routed ->
+                            append("ROUTE", "命中本地知识路线 → ${event.route.describe()}")
+                        is AgentLoop.Event.RouteStep ->
+                            append("ROUTE", "路线 ${event.index}/${event.total}：点击「${event.label}」")
+                        is AgentLoop.Event.RouteDone ->
+                            append("ROUTE", "路线走完（${event.steps} 步），剩余细节交给${container.engineName}")
+                        is AgentLoop.Event.RouteAbort ->
+                            append("WARN", event.reason)
                         is AgentLoop.Event.NeedInput ->
                             append("ASK", "需要澄清：${event.question}")
                         is AgentLoop.Event.Error ->

@@ -33,11 +33,20 @@ class Settings(context: Context) {
         get() = prefs.getBoolean(KEY_GRID, false)
         set(v) = prefs.edit().putBoolean(KEY_GRID, v).apply()
 
+    /**
+     * 知识优先：执行任务时先在已积累的导航图上做确定性路径搜索，
+     * 命中则直接按路线走（不调用大模型）；查不到路径再回退到本地 LLM 规划。
+     */
+    var routeFirst: Boolean
+        get() = prefs.getBoolean(KEY_ROUTE, true)
+        set(v) = prefs.edit().putBoolean(KEY_ROUTE, v).apply()
+
     companion object {
         private const val KEY_MODEL_PATH = "model_path"
         private const val KEY_TEMP = "temperature"
         private const val KEY_MAX_TOKENS = "max_tokens"
         private const val KEY_AUTO = "automation_enabled"
         private const val KEY_GRID = "grid_mode"
+        private const val KEY_ROUTE = "route_first"
     }
 }

@@ -8,6 +8,7 @@ import com.offlineagent.core.Explorer
 import com.offlineagent.core.MemoryStore
 import com.offlineagent.core.Planner
 import com.offlineagent.core.ReplayRunner
+import com.offlineagent.core.RoutePlanner
 import com.offlineagent.core.ScriptStore
 import com.offlineagent.llm.ElementAnnotator
 import com.offlineagent.llm.LlamaCppEngine
@@ -42,7 +43,10 @@ class AppContainer(private val app: Application) {
 
     val planner = Planner(engine)
 
-    val agentLoop = AgentLoop(planner, automator, memory)
+    /** 确定性路线规划器：直接用积累的导航图算路径，命中时不消耗大模型推理。 */
+    val routePlanner = RoutePlanner(memory)
+
+    val agentLoop = AgentLoop(planner, automator, memory, routePlanner)
 
     /** 脚本回放器：按已录制脚本逐步执行，无需重新规划。 */
     val replayRunner = ReplayRunner(automator, memory)

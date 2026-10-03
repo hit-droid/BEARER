@@ -219,6 +219,8 @@ private fun levelColor(level: String): Color = when (level) {
     // 探索与知识沉淀相关
     "PAGE", "EXPLORE", "BACK" -> Color(0xFF8ECAE6)
     "NAV" -> Color(0xFF48CAE4)
+    // 知识优先：命中本地导航图路线，不经模型推理
+    "ROUTE" -> Color(0xFF64D8CB)
     // 脚本录制/回放与本地模型标注
     "REC", "STEP", "LLM" -> Color(0xFFC792EA)
     else -> Color(0xFFEAEAEA)

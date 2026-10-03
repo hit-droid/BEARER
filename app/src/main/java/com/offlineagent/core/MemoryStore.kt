@@ -303,6 +303,76 @@ class MemoryStore(private val file: File) {
         return written
     }
 
+    /**
+     * 在已积累的导航图上做 **BFS 最短路径搜索**：从 [fromPage] 出发，找到第一个满足
+     * [isTarget] 的页面，返回沿途需要经过的导航边（即"依次点击哪些元素"）。
+     *
+     * 这是[确定性路线规划][com.offlineagent.core.RoutePlanner]的基础：
+     * 有了它，本地小模型不必再现场推理"要怎么走到目标页"，直接按已知路线走即可。
+     *
+     * @return 抵达目标页要依次点击的导航边；已在目标页返回空列表；不可达返回 null
+     */
+    fun route(packageName: String, fromPage: String, isTarget: (PageKnowledge) -> Boolean): List<NavEdge>? =
+        synchronized(lock) {
+            val app = data.apps[packageName] ?: return null
+            val start = app.pages[fromPage] ?: return null
+            if (isTarget(start)) return emptyList()
+
+            val adj = app.navEdges.groupBy { it.fromPage }
+            val queue = java.util.ArrayDeque<String>()
+            val prev = HashMap<String, NavEdge>()
+            val seen = HashSet<String>()
+            queue.add(fromPage)
+            seen.add(fromPage)
+
+            while (queue.isNotEmpty()) {
+                val cur = queue.removeFirst()
+                for (edge in adj[cur].orEmpty()) {
+                    if (!seen.add(edge.toPage)) continue
+                    prev[edge.toPage] = edge
+
+                    val page = app.pages[edge.toPage]
+                    if (page != null && isTarget(page)) {
+                        // 回溯路径
+                        val path = ArrayList<NavEdge>()
+                        var node = edge.toPage
+                        while (node != fromPage) {
+                            val e = prev[node] ?: break
+                            path.add(0, e)
+                            node = e.fromPage
+                        }
+                        return path
+                    }
+                    queue.add(edge.toPage)
+                }
+            }
+            null
+        }
+
+    /** 已积累知识的所有应用包名，用于跨应用路线切换。 */
+    fun knownPackages(): List<String> = synchronized(lock) {
+        data.apps.keys.toList()
+    }
+
+    /** 该应用已探索到的全部页面。 */
+    fun pagesOf(packageName: String): List<PageKnowledge> = synchronized(lock) {
+        data.apps[packageName]?.pages?.values?.toList() ?: emptyList()
+    }
+
+    /** 某页面的元素展示文本（原始大小写，可直接用于 [Action.TapText]）。 */
+    fun labelsOfPage(packageName: String, pageKey: String): List<String> = synchronized(lock) {
+        val app = data.apps[packageName] ?: return emptyList()
+        val page = app.pages[pageKey] ?: return emptyList()
+        page.elementKeys.mapNotNull { key ->
+            app.elements[key]?.let { it.text.ifBlank { it.desc } }?.takeIf { it.isNotBlank() }
+        }
+    }
+
+    /** 某元素的展示文本（原始大小写）。key 本身是归一化小写，点击时需用原文本。 */
+    fun labelOf(packageName: String, elementKey: String): String = synchronized(lock) {
+        data.apps[packageName]?.elements?.get(elementKey)?.let { it.text.ifBlank { it.desc } } ?: elementKey
+    }
+
     /** 某应用已积累的知识规模：页面数 → 元素数。 */
     fun describePackageStats(packageName: String): Pair<Int, Int> = synchronized(lock) {
         val app = data.apps[packageName] ?: return 0 to 0
