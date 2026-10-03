@@ -68,8 +68,15 @@
 
 ### 7. 网格点按 `Action.TapGrid`
 对无文字标签、仅靠坐标难以描述的控件，提供按网格单元（默认 10×6）点按的能力。
-`AccessibilityAutomator` 按屏幕尺寸换算单元格中心坐标为像素坐标后派发点击；设置中开启"网格点按模式"后，
+`AccessibilityAutomator` 按屏幕尺寸换算单元格中心坐标为像素坐标后派发点击；设置中开启"网格点放模式"后，
 主页显示网格参考覆盖层，便于对照单元格坐标下达 `tap_grid` 动作。
+
+### 8. 动作录制与回放（Record & Replay，对标 AppAgent 演示学习）
+让"一次成功的自动化"可复用，是离线智能体从"演示"走向"工具"的关键一环。
+
+- **录制**：`AgentLoop.run(record = true)` 每步把动作经 `Action.toScriptAction()` 转成可序列化 `ScriptAction`，连同 `UiSnapshot.pageKey` 记录的**前后页面**与成败，写入 `ScriptStep`；循环结束（或因 `Done`/`Ask` 退出）时打包成 `ActionScript` 经 `Event.Recorded` 发出。`MainViewModel` 收到后落盘到 `ScriptStore`（应用私有目录下的 `<id>.json`）。
+- **回放 `ReplayRunner`**：给定一个 `ActionScript`，用 `ScriptAction.toAction()` 还原动作，**不再调用规划器**，逐步 `device.execute`，速度更快、确定性更高；回放前读屏做"页面漂移"诊断（页面与录制时不同则提示但仍执行），回放成功会调用 `MemoryStore.success` 强化知识库。
+- **UI**：主页"录制本次任务为脚本"开关控制 `record`；新增「我的脚本」页列出脚本、支持一键回放与删除。
 
 ## 离线保证
 - `AndroidManifest.xml` 不声明 `INTERNET` 权限；

@@ -6,6 +6,8 @@ import com.offlineagent.automation.AccessibilityAutomator
 import com.offlineagent.core.AgentLoop
 import com.offlineagent.core.MemoryStore
 import com.offlineagent.core.Planner
+import com.offlineagent.core.ReplayRunner
+import com.offlineagent.core.ScriptStore
 import com.offlineagent.llm.LlamaCppEngine
 import com.offlineagent.llm.LlamaJni
 import com.offlineagent.llm.LlmEngine
@@ -26,6 +28,9 @@ class AppContainer(private val app: Application) {
     /** 本地记忆库：持久化探索到的 UI 元素，离线辅助决策。 */
     val memory = MemoryStore(File(app.filesDir, "offline_agent_memory.json"))
 
+    /** 本地脚本库：持久化录制得到的可回放自动化脚本。 */
+    val scriptStore = ScriptStore(File(app.filesDir, "scripts"))
+
     val automator = AccessibilityAutomator()
 
     private val engine: LlmEngine by lazy {
@@ -36,6 +41,9 @@ class AppContainer(private val app: Application) {
     val planner = Planner(engine)
 
     val agentLoop = AgentLoop(planner, automator, memory)
+
+    /** 脚本回放器：按已录制脚本逐步执行，无需重新规划。 */
+    val replayRunner = ReplayRunner(automator, memory)
 
     val engineName: String get() = engine.name
 

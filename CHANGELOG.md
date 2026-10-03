@@ -2,6 +2,19 @@
 
 本文件遵循 [Keep a Changelog](https://keepachangelog.com/) 约定，版本号采用 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.4.0] - 2026-10-03
+
+新增 **动作录制与回放（Record & Replay）** 能力，把离线智能体从"一次性规划执行"升级为"可复用自动化工具"。
+
+### 新增
+- **录制**：`AgentLoop` 开启 `record` 后，每步动作连同"执行前后页面指纹"与成败写入 `ScriptStep`，循环结束时打包成 `ActionScript` 经 `Event.Recorded` 发出，由 `MainViewModel` 落盘到 `ScriptStore`（应用私有目录下的 JSON）。
+- **回放 `ReplayRunner`**：给定一个 `ActionScript` 逐步执行，**不再调用规划器**，速度更快、确定性更高；回放前读取当前界面做"页面漂移"诊断，回放成功仍会强化本地知识库。
+- **可序列化动作 `ScriptAction`**：`Action` 密封类的扁平 JSON 载体，提供 `toScriptAction()` / `toAction()` 双向转换。
+- **脚本库 UI**：新增「我的脚本」页，列出已录制脚本，支持一键回放与删除；主页新增"录制本次任务为脚本"开关。
+
+### 工程
+- 版本号升至 0.4.0（versionCode 4）。
+
 ## [0.3.0] - 2026-10-03
 
 将"本地记忆库"升级为 AppAgent 式的**文档型知识库**，进一步补强离线成功率。

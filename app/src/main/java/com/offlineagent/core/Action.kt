@@ -63,6 +63,67 @@ sealed class Action {
 }
 
 /**
+ * 动作的可序列化载体（扁平结构，便于 JSON 持久化为脚本）。
+ * 普通 [Action] 是密封类，不能直接交给 kotlinx-serialization，录制脚本时统一转成它。
+ * 通过 [toAction] 还原为领域动作。
+ */
+@Serializable
+data class ScriptAction(
+    @SerialName("type") val type: String,
+    @SerialName("x") val x: Int? = null,
+    @SerialName("y") val y: Int? = null,
+    @SerialName("byText") val byText: String? = null,
+    @SerialName("text") val text: String? = null,
+    @SerialName("fromX") val fromX: Int? = null,
+    @SerialName("fromY") val fromY: Int? = null,
+    @SerialName("toX") val toX: Int? = null,
+    @SerialName("toY") val toY: Int? = null,
+    @SerialName("packageName") val packageName: String? = null,
+    @SerialName("ms") val ms: Int? = null,
+    @SerialName("direction") val direction: String? = null,
+    @SerialName("row") val row: Int? = null,
+    @SerialName("col") val col: Int? = null,
+    @SerialName("result") val result: String? = null,
+    @SerialName("question") val question: String? = null,
+    /** 录制时固化的可读标签，回放展示用。 */
+    @SerialName("label") val label: String = "",
+)
+
+/** 领域动作 → 可序列化脚本动作。 */
+fun Action.toScriptAction(): ScriptAction = when (this) {
+    is Action.Tap -> ScriptAction("tap", x = x, y = y, label = label())
+    is Action.TapText -> ScriptAction("tap_text", byText = byText, label = label())
+    is Action.Type -> ScriptAction("type", byText = byText, text = text, label = label())
+    is Action.Swipe -> ScriptAction("swipe", fromX = fromX, fromY = fromY, toX = toX, toY = toY, label = label())
+    is Action.OpenApp -> ScriptAction("open_app", packageName = packageName, label = label())
+    is Action.GoHome -> ScriptAction("go_home", label = label())
+    is Action.Back -> ScriptAction("back", label = label())
+    is Action.Wait -> ScriptAction("wait", ms = ms, label = label())
+    is Action.Scroll -> ScriptAction("scroll", direction = direction, label = label())
+    is Action.TapGrid -> ScriptAction("tap_grid", row = row, col = col, label = label())
+    is Action.Done -> ScriptAction("done", result = result, label = label())
+    is Action.Ask -> ScriptAction("ask", question = question, label = label())
+}
+
+/** 可序列化脚本动作 → 领域动作（非法/缺失字段安全回退为等待）。 */
+fun ScriptAction.toAction(): Action = when (type) {
+    "tap" -> if (x != null && y != null) Action.Tap(x, y) else Action.Wait(500)
+    "tap_text" -> Action.TapText((byText ?: "").ifEmpty { return Action.Wait(500) })
+    "type" -> Action.Type(byText, text ?: "")
+    "swipe" -> if (fromX != null && fromY != null && toX != null && toY != null)
+        Action.Swipe(fromX, fromY, toX, toY) else Action.Wait(300)
+    "open_app" -> if (packageName != null) Action.OpenApp(packageName) else Action.Wait(300)
+    "go_home" -> Action.GoHome
+    "back" -> Action.Back
+    "wait" -> Action.Wait((ms ?: 500).coerceIn(100, 5000))
+    "scroll" -> Action.Scroll(direction ?: "down")
+    "tap_grid" -> if (row != null && col != null) Action.TapGrid(row, col) else Action.Wait(500)
+    "done" -> Action.Done(result ?: "已完成")
+    "ask" -> Action.Ask(question ?: "需要更多信息才能继续")
+    else -> Action.Wait(500)
+}
+
+/**
  * 规划器从 LLM 输出中解析的 JSON 数据载体（扁平结构，便于模型稳定输出）。
  * 通过 [toAction] 转换为领域动作 [Action]。
  */

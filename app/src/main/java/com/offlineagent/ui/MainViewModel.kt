@@ -4,7 +4,9 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.offlineagent.OfflineAgentApp
 import com.offlineagent.automation.AgentAccessibilityService
+import com.offlineagent.core.ActionScript
 import com.offlineagent.core.AgentLoop
+import com.offlineagent.core.ReplayRunner
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -22,10 +24,14 @@ data class MainUiState(
     val engineName: String = "",
     val accessibilityEnabled: Boolean = false,
     val modelStatus: String = "",
+    /** 录制模式：本次运行结束后把动作序列保存为可回放脚本。 */
+    val recordMode: Boolean = false,
+    /** 已保存的脚本列表（设置/脚本页刷新后填入）。 */
+    val scripts: List<ActionScript> = emptyList(),
 )
 
 /**
- * 主页状态机：驱动智能体循环并把事件转成可展示日志与实时观察。
+ * 主页状态机：驱动智能体循环/回放并把事件转成可展示日志与实时观察。
  */
 class MainViewModel(app: android.app.Application) : AndroidViewModel(app) {
 
@@ -38,6 +44,7 @@ class MainViewModel(app: android.app.Application) : AndroidViewModel(app) {
 
     init {
         refreshStatus()
+        loadScripts()
     }
 
     fun refreshStatus() {
@@ -49,6 +56,15 @@ class MainViewModel(app: android.app.Application) : AndroidViewModel(app) {
                 modelStatus = if (name.contains("Stub")) "内置规划器（无需模型）" else "待加载模型",
             )
         }
+    }
+
+    fun setRecordMode(on: Boolean) {
+        _state.update { it.copy(recordMode = on) }
+    }
+
+    /** 刷新已保存脚本列表。 */
+    fun loadScripts() {
+        _state.update { it.copy(scripts = container.scriptStore.list()) }
     }
 
     fun start(goal: String) {
@@ -65,8 +81,9 @@ class MainViewModel(app: android.app.Application) : AndroidViewModel(app) {
             if (!_state.value.accessibilityEnabled) {
                 append("WARN", "无障碍服务未开启，自动化动作不会真正执行（可在设置中开启）。")
             }
+            if (_state.value.recordMode) append("REC", "录制模式已开启：结束后自动保存脚本")
             runCatching {
-                container.agentLoop.run(goal).collect { event ->
+                container.agentLoop.run(goal, record = _state.value.recordMode).collect { event ->
                     when (event) {
                         is AgentLoop.Event.Planning ->
                             append("PLAN", "规划 → ${event.action.label()}${event.reason?.let { "  (${it})" } ?: ""}")
@@ -82,6 +99,11 @@ class MainViewModel(app: android.app.Application) : AndroidViewModel(app) {
                         }
                         is AgentLoop.Event.Executed ->
                             append(if (event.success) "ACT" else "FAIL", "执行 ${event.action.label()} → ${event.message}")
+                        is AgentLoop.Event.Recorded -> {
+                            container.scriptStore.save(event.script)
+                            loadScripts()
+                            append("REC", "已保存脚本「${event.script.name}」（${event.script.steps.size} 步）")
+                        }
                         is AgentLoop.Event.Finished ->
                             append("DONE", "完成：${event.result}（共 ${event.steps} 步）")
                         is AgentLoop.Event.NeedInput ->
@@ -94,6 +116,39 @@ class MainViewModel(app: android.app.Application) : AndroidViewModel(app) {
             _state.update { it.copy(running = false) }
             append("INFO", "智能体已停止。")
         }
+    }
+
+    /** 回放一个已保存脚本：按步骤执行，不再规划。 */
+    fun replay(script: ActionScript) {
+        if (_state.value.running) return
+        job = viewModelScope.launch {
+            _state.update { it.copy(running = true, logs = emptyList(), observation = "") }
+            append("INFO", "开始回放脚本「${script.name}」（${script.steps.size} 步）")
+            if (!_state.value.accessibilityEnabled) {
+                append("WARN", "无障碍服务未开启，自动化动作不会真正执行（可在设置中开启）。")
+            }
+            runCatching {
+                container.replayRunner.run(script).collect { ev ->
+                    when (ev) {
+                        is ReplayRunner.Event.Step ->
+                            append("STEP", "步骤 ${ev.index + 1}/${script.steps.size}：${ev.label}")
+                        is ReplayRunner.Event.Executed ->
+                            append(if (ev.success) "ACT" else "FAIL", "执行 ${ev.action.label()} → ${ev.message}")
+                        is ReplayRunner.Event.Finished ->
+                            append("DONE", ev.result)
+                        is ReplayRunner.Event.Error ->
+                            append("ERROR", ev.message)
+                    }
+                }
+            }.onFailure { append("ERROR", "回放异常：${it.message}") }
+            _state.update { it.copy(running = false) }
+            append("INFO", "回放已停止。")
+        }
+    }
+
+    fun deleteScript(id: String) {
+        container.scriptStore.delete(id)
+        loadScripts()
     }
 
     fun stop() {

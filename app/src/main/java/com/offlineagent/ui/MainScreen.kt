@@ -26,7 +26,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -34,6 +36,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
@@ -48,7 +51,12 @@ import com.offlineagent.core.Action
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen(viewModel: MainViewModel, container: com.offlineagent.di.AppContainer, onOpenSettings: () -> Unit) {
+fun MainScreen(
+    viewModel: MainViewModel,
+    container: com.offlineagent.di.AppContainer,
+    onOpenSettings: () -> Unit,
+    onOpenScripts: () -> Unit,
+) {
     val uiState by viewModel.state.collectAsStateWithLifecycle()
     var goal by remember { mutableStateOf("") }
     val context = LocalContext.current
@@ -61,6 +69,7 @@ fun MainScreen(viewModel: MainViewModel, container: com.offlineagent.di.AppConta
             TopAppBar(
                 title = { Text("离线智能体") },
                 actions = {
+                    TextButton(onClick = onOpenScripts) { Text("我的脚本") }
                     IconButton(onClick = onOpenSettings) {
                         Icon(Icons.Filled.Settings, contentDescription = "设置")
                     }
@@ -94,6 +103,16 @@ fun MainScreen(viewModel: MainViewModel, container: com.offlineagent.di.AppConta
                 minLines = 2,
                 keyboardOptions = KeyboardOptions(autoCorrect = false),
             )
+
+            // 录制模式开关：开启后本次运行结束会自动保存为可回放脚本
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text("录制本次任务为脚本", style = MaterialTheme.typography.bodyMedium)
+                Switch(checked = uiState.recordMode, onCheckedChange = { viewModel.setRecordMode(it) })
+            }
 
             Row(
                 modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),

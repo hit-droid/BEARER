@@ -39,16 +39,40 @@ class AgentLoop(
 
         /** 发生错误，循环终止。 */
         data class Error(val message: String) : Event
+
+        /**
+         * 录制产物：当 [run] 开启 [record] 时，在循环结束时（或中途因 Done/Ask 退出时）
+         * 发出，包含本次任务可用的可回放脚本。调用方据此落盘到 [ScriptStore]。
+         */
+        data class Recorded(val script: ActionScript) : Event
     }
 
-    fun run(goal: String, config: Config = Config()): Flow<Event> = flow {
+    fun run(goal: String, config: Config = Config(), record: Boolean = false): Flow<Event> = flow {
         val history = mutableListOf<String>()
+        val recorded = mutableListOf<ScriptStep>()
+        var sourcePkg = ""
+
+        // 局部挂起函数：把已累积的步骤打包成脚本并发出（仅在录制模式）
+        suspend fun emitRecorded(): ActionScript? {
+            if (!record || recorded.isEmpty()) return null
+            val script = ActionScript(
+                id = "rec_${System.currentTimeMillis().toString(36)}",
+                name = goal.take(40).ifBlank { "未命名任务" },
+                goal = goal,
+                packageName = sourcePkg,
+                createdAt = System.currentTimeMillis(),
+                steps = recorded.toList(),
+            )
+            emit(Event.Recorded(script))
+            return script
+        }
 
         repeat(config.maxSteps) {
             val snapshot = runCatching { device.snapshot() }.getOrElse { e ->
                 emit(Event.Error("读取界面失败：${e.message}"))
                 return@flow
             }
+            if (sourcePkg.isBlank()) sourcePkg = snapshot.packageName
             emit(Event.Observation(snapshot))
 
             // ---- 探索阶段：把当前页面与可交互元素登记进文档型知识库 ----
@@ -73,10 +97,12 @@ class AgentLoop(
 
             when (action) {
                 is Action.Done -> {
+                    emitRecorded()
                     emit(Event.Finished(action.result, history.size))
                     return@flow
                 }
                 is Action.Ask -> {
+                    emitRecorded()
                     emit(Event.NeedInput(action.question))
                     return@flow
                 }
@@ -103,6 +129,10 @@ class AgentLoop(
                         if (action is Action.TapText) memory.fail(pkg, elementKeyOf(action.byText, ""))
                     }
 
+                    // 录制：记录本步动作 + 前后页面 + 成功与否
+                    val afterPage = runCatching { device.snapshot() }.getOrElse { null }?.pageKey
+                    recorded.add(ScriptStep(action.toScriptAction(), pageKey, afterPage, res.success))
+
                     history.add(describe(action))
                     // 每步统一落盘一次（探索登记只更新内存，避免频繁全量写文件）
                     memory.flush()
@@ -111,6 +141,7 @@ class AgentLoop(
             }
         }
 
+        emitRecorded()
         emit(Event.Finished("已达到最大步数 ${config.maxSteps}，自动停止。", history.size))
     }
 

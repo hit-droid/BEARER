@@ -11,6 +11,7 @@ import androidx.navigation.compose.rememberNavController
 import com.offlineagent.ui.MainScreen
 import com.offlineagent.ui.MainViewModel
 import com.offlineagent.ui.SettingsScreen
+import com.offlineagent.ui.ScriptsScreen
 import com.offlineagent.ui.theme.OfflineAgentTheme
 
 class MainActivity : ComponentActivity() {
@@ -24,7 +25,15 @@ class MainActivity : ComponentActivity() {
                 val viewModel: MainViewModel = viewModel()
                 NavHost(navController = navController, startDestination = "main") {
                     composable("main") {
-                        MainScreen(viewModel, container, onOpenSettings = { navController.navigate("settings") })
+                        MainScreen(
+                            viewModel,
+                            container,
+                            onOpenSettings = { navController.navigate("settings") },
+                            onOpenScripts = { navController.navigate("scripts") },
+                        )
+                    }
+                    composable("scripts") {
+                        ScriptsScreen(viewModel, onBack = { navController.popBackStack() })
                     }
                     composable("settings") {
                         SettingsScreen(container, onBack = { navController.popBackStack() })
